@@ -46,7 +46,7 @@ namespace UserDataGenerator_C_
             return result + "@test.com";
         }
 
-        public int PhoneNumerGenerator()
+        public int PhoneNumberGenerator()
         {
             // Generate a random phone number
             return rnd.Next(100000000, 999999999);

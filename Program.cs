@@ -129,7 +129,7 @@ namespace UserDataGenerator_C_
                         firstName,
                         lastName,
                         firstName.ToLower() + "." + lastName.ToLower() + "@test.com",
-                        "+" + dataGenerators.PhoneNumerGenerator(),
+                        "+" + dataGenerators.PhoneNumberGenerator(),
                         passNumber,
                         string.Empty
                     );
