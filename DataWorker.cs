@@ -148,5 +148,46 @@ namespace UserDataGenerator_C_
                 csv.WriteRecords(users);
             }
         }
+
+        public static void CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
+        {
+            var query = Queries.Maintainenance_CreateIdx.Replace("@idx_name", indexName)
+                                                        .Replace("@table", tableName)
+                                                        .Replace("@col", columnName);
+            using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand(query, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public static void DropIndexIfExists(string dbPath, string indexName)
+        {
+            var query = Queries.Maintainenance_DropIdx.Replace("@idx_name", indexName);
+            using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand(query, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+        }   
+
+        public static void VacuumDatabase(string dbPath)
+        {
+            using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand(Queries.Maintainenance_VacuumDB, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+            Log.Information("Database vacuumed successfully.");
+        }
     }
 }

@@ -56,6 +56,9 @@ namespace UserDataGenerator_C_
                 HashSet<User> usersSet = new HashSet<User>();
 
                 HashSet<User> usersInDBSet = new HashSet<User>();
+                HashSet<string> passNumberSetDB = new HashSet<string>();
+                HashSet<int> taxIdDBSet = new HashSet<int>();
+                HashSet<string> emailSetDB = new HashSet<string>();
 
                 // Create database and table if it does not exist 
                 DataWorker.CreateDatabase_IfNotExists(DBPath);
@@ -64,6 +67,9 @@ namespace UserDataGenerator_C_
                 if (isUsersTableExists && parameters.InMemoryProcessing)
                 {
                     usersInDBSet = new HashSet<User>(DataWorker.GetUsersFromDB(DBPath));
+                    taxIdDBSet = new HashSet<int>(usersInDBSet.Select(x => x.TaxID));
+                    passNumberSetDB = new HashSet<string>(usersInDBSet.Select(x => x.PassNumber));
+                    emailSetDB = new HashSet<string>(usersInDBSet.Select(x => x.Email));
                 }
 
                 int i = START_INDEX;
@@ -77,7 +83,7 @@ namespace UserDataGenerator_C_
                                                                          StartupParameters.MAX_VALID_TAXES_PAYER_NUMBER,
                                                                          parameters.InvalidTaxPayerRatio);
 
-                    if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = usersInDBSet.Select(x => x.TaxID).Contains(taxId);
+                    if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = taxIdDBSet.Contains(taxId);
                     else isTaxIdAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0;
 
                     if(!isTaxIdAlreadyExists)
@@ -94,7 +100,7 @@ namespace UserDataGenerator_C_
                     bool isPassNumberAlreadyExists = false;
                     string passNumber = dataGenerators.KurwaPassNumberGenerator();
 
-                    if (parameters.InMemoryProcessing) isPassNumberAlreadyExists = usersInDBSet.Select(x => x.PassNumber).Contains(passNumber);
+                    if (parameters.InMemoryProcessing) isPassNumberAlreadyExists = passNumberSetDB.Contains(passNumber);
                     else isPassNumberAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", passNumber) > 0;
 
                     if (!isPassNumberAlreadyExists)
@@ -130,7 +136,7 @@ namespace UserDataGenerator_C_
 
                     do
                     {
-                        if (parameters.InMemoryProcessing) isEmailExists = usersInDBSet.Select(x => x.Email).Contains(user.Email);
+                        if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email);
                         else isEmailExists = DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0;
                         
                         if(isEmailExists) user.Email = dataGenerators.EmailGenerator(firstName, lastName);
@@ -162,10 +168,47 @@ namespace UserDataGenerator_C_
                         usersSet.Clear();
                         i++;
                         totalAmount += 1;
+
+                        /*
+                         * Idea is: each 1000 records recreate index for better performance
+                         */
+                        if(totalAmount % 1000 == 1)
+                        {
+                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
+                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
+                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
+
+                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
+                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
+                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
+                        }
                     }
                     else i = usersSet.Count;
+                    CalculateTaskCompletion(parameters.Amount, i);
                 }
+
+                if(parameters.DbBulkInsert)
+                {
+                    switch (parameters.OutputTo)
+                    {
+                        case 0: // Write to CSV
+                            DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                            break;
+                        case 1: // Write to DB
+                            DataWorker.InsertUserToDB(DBPath, usersSet);
+                            break;
+                        case 2: // Both options (To CSV and DB)
+                            DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                            DataWorker.InsertUserToDB(DBPath, usersSet);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
                 Log.Information("Amount of unique users generated: {Count}", totalAmount);
+
+                DataWorker.VacuumDatabase(DBPath);
             }
 			catch (Exception ex)
 			{
@@ -183,6 +226,16 @@ namespace UserDataGenerator_C_
         private static string CurrentDateTime_Formatted()
         {
             return DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToLongTimeString();
+        }
+
+        private static void CalculateTaskCompletion(int amount, int i)
+        {
+            int divisionRemainder = amount / 20;
+            if (divisionRemainder > 0 && i % divisionRemainder == 0)
+            {
+                int percentComplegted = i * 100 / amount;
+                Log.Information("Task completed: {Percent}%", percentComplegted);
+            }
         }
     }
 }

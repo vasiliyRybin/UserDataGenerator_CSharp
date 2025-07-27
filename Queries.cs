@@ -24,5 +24,9 @@ namespace UserDataGenerator_C_
         public static string GetDataFromTable = "SELECT @cols FROM @table;";
 
         public static string GetSomeValueFromSomeTable_ReturnNumberOfRows = "SELECT COUNT(@col) AS Cnt FROM @table WHERE @col = '@value'";
+
+        public static string Maintainenance_DropIdx = "DROP INDEX IF EXISTS @idx_name;";
+        public static string Maintainenance_CreateIdx = "CREATE INDEX IF NOT EXISTS @idx_name ON @table(@col);";
+        public static string Maintainenance_VacuumDB = "VACUUM;";
     }
 }
