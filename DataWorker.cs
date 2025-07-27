@@ -113,21 +113,36 @@ namespace UserDataGenerator_C_
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
             {
                 connection.Open();
-                foreach (var user in users)
-                {
-                    var query = "INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) " +
-                                $"VALUES (@TaxID, @FirstName, @LastName, @Email, @PhoneNumber, @PassNumber, '{user.Comment}')";
 
-                    using (var command = new SQLiteCommand(query, connection))
+                using (var transaction = connection.BeginTransaction()) 
+                using (var command = new SQLiteCommand(
+                    "INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) " +
+                    "VALUES (@TaxID, @FirstName, @LastName, @Email, @PhoneNumber, @PassNumber, @Comment)",
+                    connection,
+                    transaction))
+                {
+                    var taxIdParam = command.Parameters.Add("@TaxID", System.Data.DbType.Int32);
+                    var firstNameParam = command.Parameters.Add("@FirstName", System.Data.DbType.String);
+                    var lastNameParam = command.Parameters.Add("@LastName", System.Data.DbType.String);
+                    var emailParam = command.Parameters.Add("@Email", System.Data.DbType.String);
+                    var phoneNumberParam = command.Parameters.Add("@PhoneNumber", System.Data.DbType.String);
+                    var passNumberParam = command.Parameters.Add("@PassNumber", System.Data.DbType.String);
+                    var commentParam = command.Parameters.Add("@Comment", System.Data.DbType.String);
+
+                    foreach (var user in users)
                     {
-                        command.Parameters.AddWithValue("@TaxID", user.TaxID);
-                        command.Parameters.AddWithValue("@FirstName", user.FirstName);
-                        command.Parameters.AddWithValue("@LastName", user.LastName);
-                        command.Parameters.AddWithValue("@Email", user.Email);
-                        command.Parameters.AddWithValue("@PhoneNumber", user.PhoneNumber);
-                        command.Parameters.AddWithValue("@PassNumber", user.PassNumber);
+                        taxIdParam.Value = user.TaxID;
+                        firstNameParam.Value = user.FirstName;
+                        lastNameParam.Value = user.LastName;
+                        emailParam.Value = user.Email;
+                        phoneNumberParam.Value = user.PhoneNumber;
+                        passNumberParam.Value = user.PassNumber;
+                        commentParam.Value = user.Comment;
+
                         command.ExecuteNonQuery();
                     }
+
+                    transaction.Commit();
                 }
             }
         }
@@ -136,6 +151,8 @@ namespace UserDataGenerator_C_
         {
             bool fileExists = File.Exists(filePath);
             bool writeHeader = !fileExists || new FileInfo(filePath).Length == 0;
+
+            if(users.Count > 1) Log.Information($"Writing {users.Count} users to CSV file: {filePath}");
 
             var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture)
             {
@@ -147,6 +164,7 @@ namespace UserDataGenerator_C_
             {
                 csv.WriteRecords(users);
             }
+            Log.Information($"Data written to CSV file: {filePath}");
         }
 
         public static void CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)

@@ -172,7 +172,7 @@ namespace UserDataGenerator_C_
                         /*
                          * Idea is: each 1000 records recreate index for better performance
                          */
-                        if(totalAmount % 1000 == 1)
+                        if (totalAmount % 1000 == 1)
                         {
                             DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
                             DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
@@ -183,12 +183,17 @@ namespace UserDataGenerator_C_
                             DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
                         }
                     }
-                    else i = usersSet.Count;
+                    else
+                    {
+                        i = usersSet.Count;
+                        totalAmount += 1;
+                    }
                     CalculateTaskCompletion(parameters.Amount, i);
                 }
 
                 if(parameters.DbBulkInsert)
                 {
+                    Log.Information("Bulk insert to DB is enabled. Inserting all records at once...");
                     switch (parameters.OutputTo)
                     {
                         case 0: // Write to CSV
