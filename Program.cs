@@ -83,8 +83,8 @@ namespace UserDataGenerator_C_
                                                                          StartupParameters.MAX_VALID_TAXES_PAYER_NUMBER,
                                                                          parameters.InvalidTaxPayerRatio);
 
-                    if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = taxIdDBSet.Contains(taxId);
-                    else isTaxIdAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0;
+                    if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = taxIdDBSet.Contains(taxId) || taxesPayerNumberSet.Contains(taxId);
+                    else isTaxIdAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0 || taxesPayerNumberSet.Contains(taxId);
 
                     if(!isTaxIdAlreadyExists)
                     {
@@ -123,12 +123,20 @@ namespace UserDataGenerator_C_
                     int taxID = taxesPayerNumberSet.ElementAt(i);
                     string passNumber = passNumberSet.ElementAt(i);
 
+                    string email = string.Empty;                    
+                    if(lastName.Contains("\'")) 
+                        email = firstName.ToLower() + "." + lastName.Replace("\'", "").ToLower() + "@test.com";
+                    else email = firstName.ToLower() + "." + lastName.ToLower() + "@test.com";
+
+
+                    emailSetDB.Add(email);
+
                     User user = new User
                     (
                         taxID,
                         firstName,
                         lastName,
-                        firstName.ToLower() + "." + lastName.ToLower() + "@test.com",
+                        email,
                         "+" + dataGenerators.PhoneNumberGenerator(),
                         passNumber,
                         string.Empty
@@ -136,10 +144,11 @@ namespace UserDataGenerator_C_
 
                     do
                     {
-                        if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email);
-                        else isEmailExists = DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0;
+                        if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email) || emailSetDB.Contains(user.Email);
+                        else isEmailExists = DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0 || emailSetDB.Contains(user.Email);
                         
-                        if(isEmailExists) user.Email = dataGenerators.EmailGenerator(firstName, lastName);
+                        if(isEmailExists) user.Email = lastName.Contains("\'") ? dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", "")) 
+                                                                               : dataGenerators.EmailGenerator(firstName, lastName);
                         userRecordString = user.ToString();
 
                     } while (isEmailExists);
@@ -150,37 +159,31 @@ namespace UserDataGenerator_C_
 
                     if (!parameters.DbBulkInsert)
                     {
-                        switch (parameters.OutputTo)
+                        try
                         {
-                            case 0: // Write to CSV
-                                DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                                break;
-                            case 1: // Write to DB
-                                DataWorker.InsertUserToDB(DBPath, usersSet);
-                                break;
-                            case 2: // Both options (To CSV and DB)
-                                DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                                DataWorker.InsertUserToDB(DBPath, usersSet);
-                                break;
-                            default:
-                                break;
+                            DataWorker.WriteData(parameters, generatedDataPath, paths, usersSet);
+                            usersSet.Clear();
+                            i++;
+                            totalAmount += 1;
+
+                            /*
+                             * Idea is: each 1000 records recreate index for better performance
+                             */
+                            if (totalAmount % 1000 == 1)
+                            {
+                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
+                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
+                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
+
+                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
+                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
+                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
+                            }
                         }
-                        usersSet.Clear();
-                        i++;
-                        totalAmount += 1;
-
-                        /*
-                         * Idea is: each 1000 records recreate index for better performance
-                         */
-                        if (totalAmount % 1000 == 1)
+                        catch (Exception ex)
                         {
-                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
-                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
-                            DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
-
-                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
-                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
-                            DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
+                            Log.Error("Error inserting user: {Message}", ex.Message);
+                            Log.Error(userRecordString);
                         }
                     }
                     else
@@ -191,29 +194,23 @@ namespace UserDataGenerator_C_
                     CalculateTaskCompletion(parameters.Amount, i);
                 }
 
-                if(parameters.DbBulkInsert)
+                try
                 {
-                    Log.Information("Bulk insert to DB is enabled. Inserting all records at once...");
-                    switch (parameters.OutputTo)
+                    if (parameters.DbBulkInsert)
                     {
-                        case 0: // Write to CSV
-                            DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                            break;
-                        case 1: // Write to DB
-                            DataWorker.InsertUserToDB(DBPath, usersSet);
-                            break;
-                        case 2: // Both options (To CSV and DB)
-                            DataWorker.WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                            DataWorker.InsertUserToDB(DBPath, usersSet);
-                            break;
-                        default:
-                            break;
+                        Log.Information("Bulk insert to DB is enabled. Inserting all records at once...");
+                        DataWorker.WriteData(parameters, generatedDataPath, paths, usersSet);
                     }
+
+                    Log.Information("Amount of unique users generated: {Count}", totalAmount);
+
+                    DataWorker.VacuumDatabase(DBPath);
                 }
-
-                Log.Information("Amount of unique users generated: {Count}", totalAmount);
-
-                DataWorker.VacuumDatabase(DBPath);
+                catch (Exception ex)
+                {
+                    Log.Error("Error during bulk insert: {Message}", ex.Message);
+                    Log.Error(userRecordString);
+                }
             }
 			catch (Exception ex)
 			{

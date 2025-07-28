@@ -25,7 +25,7 @@ namespace UserDataGenerator_C_
 
         public override string ToString()
         {
-            return $"{FirstName} {LastName}, Email: {Email}, Phone: {PhoneNumber}, Passport number: {PassNumber}, Comment: {Comment}";
+            return $"UserID: {TaxID}, {FirstName} {LastName}, Email: {Email}, Phone: {PhoneNumber}, Passport number: {PassNumber}, Comment: {Comment}";
         }
 
         public override bool Equals(object obj)

@@ -35,7 +35,7 @@ namespace UserDataGenerator_C_
         }
         public string EmailGenerator(string firstName, string lastName)
         {
-            string result = firstName.ToLower() + "." + lastName.ToLower();
+            string result = firstName.ToLower() + "." + lastName.ToLower() + ".";
             int amountOfPostfixLetters = rnd.Next(1, 5);
 
             for (int i = 0; i < amountOfPostfixLetters; i++)
@@ -43,7 +43,7 @@ namespace UserDataGenerator_C_
                 result += Letters[rnd.Next(Letters.Length - 1)];
             }
 
-            return result + "@test.com";
+            return (result + "@test.com").ToLowerInvariant();
         }
 
         public int PhoneNumberGenerator()

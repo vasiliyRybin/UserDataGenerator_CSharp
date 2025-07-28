@@ -6,6 +6,7 @@ using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -90,10 +91,11 @@ namespace UserDataGenerator_C_
             {
                 connection.Open();
                 var query = Queries.GetSomeValueFromSomeTable_ReturnNumberOfRows.Replace("@col", columnName)
-                                                                                .Replace("@table", tblName);
+                                                                                .Replace("@table", tblName)
+                                                                                .Replace("@value", value);
                 using (var command = new SQLiteCommand(query, connection))
                 {
-                    command.Parameters.AddWithValue("@value", value);    
+                    //command.Parameters.AddWithValue("@value", value);    
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
@@ -114,7 +116,7 @@ namespace UserDataGenerator_C_
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction()) 
+                using (var transaction = connection.BeginTransaction())
                 using (var command = new SQLiteCommand(
                     "INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) " +
                     "VALUES (@TaxID, @FirstName, @LastName, @Email, @PhoneNumber, @PassNumber, @Comment)",
@@ -131,15 +133,23 @@ namespace UserDataGenerator_C_
 
                     foreach (var user in users)
                     {
-                        taxIdParam.Value = user.TaxID;
-                        firstNameParam.Value = user.FirstName;
-                        lastNameParam.Value = user.LastName;
-                        emailParam.Value = user.Email;
-                        phoneNumberParam.Value = user.PhoneNumber;
-                        passNumberParam.Value = user.PassNumber;
-                        commentParam.Value = user.Comment;
+                        try
+                        {
+                            taxIdParam.Value = user.TaxID;
+                            firstNameParam.Value = user.FirstName;
+                            lastNameParam.Value = user.LastName;
+                            emailParam.Value = user.Email;
+                            phoneNumberParam.Value = user.PhoneNumber;
+                            passNumberParam.Value = user.PassNumber;
+                            commentParam.Value = user.Comment;
 
-                        command.ExecuteNonQuery();
+                            command.ExecuteNonQuery();
+                        }
+                        catch(Exception ex) 
+                        { 
+                            Log.Error($"Error inserting user: {ex.Message}");
+                            Log.Error(user.ToString());
+                        }
                     }
 
                     transaction.Commit();
@@ -164,7 +174,7 @@ namespace UserDataGenerator_C_
             {
                 csv.WriteRecords(users);
             }
-            Log.Information($"Data written to CSV file: {filePath}");
+            if (users.Count > 1) Log.Information($"Data written to CSV file: {filePath}");
         }
 
         public static void CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
@@ -206,6 +216,27 @@ namespace UserDataGenerator_C_
                 }
             }
             Log.Information("Database vacuumed successfully.");
+        }
+
+        public static void WriteData(StartupParameters parameters, string generatedDataPath, Dictionary<string, string> paths, HashSet<User> usersSet)
+        {
+            var DBPath = generatedDataPath + paths["PathToDB"];
+
+            switch (parameters.OutputTo)
+            {
+                case 0: // Write to CSV
+                    WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                    break;
+                case 1: // Write to DB
+                    InsertUserToDB(DBPath, usersSet);
+                    break;
+                case 2: // Both options (To CSV and DB)
+                    WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                    InsertUserToDB(DBPath, usersSet);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }
