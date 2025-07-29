@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace UserDataGenerator_C_
+﻿namespace UserDataGenerator_C_
 {
     public static class Queries
     {

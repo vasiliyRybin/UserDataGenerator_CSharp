@@ -1,12 +1,30 @@
 ﻿using Serilog;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace UserDataGenerator_C_
 {
+    /// <summary>
+    /// Available startup parameters for the application as next:
+    /// 
+    /// amount:100000                   - Any amount of users to be generated, must be greater than 0
+    /// invalid_tax_id_ratio:10         - Ratio of invalid tax payer numbers, must be greater than or equal to 0
+    /// output_to:2                     - 0 - write to CSV file, 1 - write to DB, 2 - both options (to CSV and DB)
+    /// in_memory_processing:0          - 0 - disabled, 1 - enabled (use carefully: loads all data from Users table into RAM. If there's already too much of data, app may crash)
+    /// data_bulk_insert:1              - 0 - disabled, 1 - enabled (when disabled, works as next: one user - one insertion. Otherwise all newly generated users 
+    ///                                   will be stored in memory and then inserted with one command. But if there're will be more than 250.000 users generated, it will insert 
+    ///                                   250.000 per iteration)
+    ///                                   
+    /// debug                           - if that parameter was added, all the logs will be written to the console and logfile, otherwise only errors and warnings will be logged 
+    /// 
+    /// 
+    /// 
+    /// Example of combining startup parameters:
+    /// in_memory_processing:1 data_bulk_insert:1  ===> In-memory processing is enabled and DB bulk insert is enabled as well = consuming RAM, but faster processing
+    /// in_memory_processing:0 data_bulk_insert:1  ===> consuming RAM only to store data for bulk insert, but not for processing, working speed is slower than previous example
+    /// in_memory_processing:1 data_bulk_insert:0  ===> consuming RAM to store data for processing, but not for bulk insert, working speed is almost the same as the previous example
+    /// in_memory_processing:0 data_bulk_insert:0  ===> not consuming RAM, working speed is the slowest, but it will not crash if there's too much data in Users table.
+    ///                                                 Good for small amounts of data, but not for big ones.
+    /// 
+    /// </summary>
     public class StartupParameters
     {
         public static readonly int MIN_VALID_TAXES_PAYER_NUMBER = 1;
@@ -100,5 +118,5 @@ namespace UserDataGenerator_C_
                 }
             }
         }
-    }        
+    }
 }

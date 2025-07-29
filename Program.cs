@@ -3,11 +3,9 @@ using RandomDataGenerator.Randomizers;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Policy;
 using System.Threading.Tasks;
 
 namespace UserDataGenerator_C_
@@ -15,12 +13,19 @@ namespace UserDataGenerator_C_
     public class Program
     {
         static async Task Main(string[] args)
-        {            
+        {
             Dictionary<string, string> paths = new Dictionary<string, string>
             {
                 { "PathToDB", "TestUserData.db" },
                 { "PathToCSV", "TestUserData.csv" },
                 { "PathToLog", "Log.txt" }
+            };
+
+            List<Tuple<string, string, string>> idxTuple = new List<Tuple<string, string, string>>()
+            {
+                new Tuple<string, string, string>("IX_Users_TaxID", "Users", "TaxID"),
+                new Tuple<string, string, string>("IX_Users_Email", "Users", "Email"),
+                new Tuple<string, string, string>("IX_Users_PassNumber", "Users", "PassNumber")
             };
 
             const int START_INDEX = 0;
@@ -33,7 +38,7 @@ namespace UserDataGenerator_C_
 
             Stopwatch sw = new Stopwatch();
             sw.Start();
-            
+
             LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, outputTemplate: "[{Timestamp:dd-MM-yyyy HH:mm:ss}] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -70,6 +75,9 @@ namespace UserDataGenerator_C_
                     taxIdDBSet = new HashSet<int>(usersInDBSet.Select(x => x.TaxID));
                     passNumberSetDB = new HashSet<string>(usersInDBSet.Select(x => x.PassNumber));
                     emailSetDB = new HashSet<string>(usersInDBSet.Select(x => x.Email));
+
+                    usersInDBSet = null; // Clear memory
+                    GC.Collect(); // Force garbage collection
                 }
 
                 int i = START_INDEX;
@@ -78,21 +86,21 @@ namespace UserDataGenerator_C_
                 while (i < parameters.Amount)
                 {
                     bool isTaxIdAlreadyExists = false;
-                    int taxId = await dataGenerators.TaxesPayerNumberGenerator(StartupParameters.MIN_VALID_TAXES_PAYER_NUMBER, 
+                    int taxId = await dataGenerators.TaxesPayerNumberGenerator(StartupParameters.MIN_VALID_TAXES_PAYER_NUMBER,
                                                                          StartupParameters.MAX_VALID_TAXES_PAYER_NUMBER,
                                                                          parameters.InvalidTaxPayerRatio);
 
                     if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = taxIdDBSet.Contains(taxId) || taxesPayerNumberSet.Contains(taxId);
                     else isTaxIdAlreadyExists = await DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0 || taxesPayerNumberSet.Contains(taxId);
 
-                    if(!isTaxIdAlreadyExists)
+                    if (!isTaxIdAlreadyExists)
                     {
                         taxesPayerNumberSet.Add(taxId);
                         i = taxesPayerNumberSet.Count;
                     }
                 }
                 Log.Information("Amount of unique Tax IDs generated: {Count}", taxesPayerNumberSet.Count);
-                
+
                 i = START_INDEX;
                 while (i < parameters.Amount)
                 {
@@ -120,7 +128,6 @@ namespace UserDataGenerator_C_
                 taxesPayerNumberSet = null;
                 passNumberSet = null;
                 GC.Collect();
-                Log.Debug("GC");
 
                 while (i < parameters.Amount)
                 {
@@ -130,8 +137,8 @@ namespace UserDataGenerator_C_
                     int taxID = taxID_Arr[i];
                     string passNumber = passNumber_Arr[i];
 
-                    string email = string.Empty;                    
-                    if(lastName.Contains("\'")) 
+                    string email = string.Empty;
+                    if (lastName.Contains("\'"))
                         email = firstName.ToLower() + "." + lastName.Replace("\'", "").ToLower() + "@test.com";
                     else email = firstName.ToLower() + "." + lastName.ToLower() + "@test.com";
 
@@ -153,9 +160,9 @@ namespace UserDataGenerator_C_
                     {
                         if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email);
                         else isEmailExists = await DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0 || emailSetDB.Contains(user.Email);
-                        
-                        if(isEmailExists) user.Email = lastName.Contains("\'") ? await dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", "")) 
-                                                                               : await dataGenerators.EmailGenerator(firstName, lastName);
+
+                        if (isEmailExists) user.Email = lastName.Contains("\'") ? await dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", ""))
+                                                                                : await dataGenerators.EmailGenerator(firstName, lastName);
                         userRecordString = user.ToString();
 
                     } while (isEmailExists);
@@ -172,20 +179,6 @@ namespace UserDataGenerator_C_
                             usersSet.Clear();
                             i++;
                             totalAmount += 1;
-
-                            /*
-                             * Idea is: each 1000 records recreate index for better performance
-                             */
-                            if (totalAmount % 1000 == 1)
-                            {
-                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
-                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
-                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
-
-                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
-                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
-                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
-                            }
                         }
                         catch (Exception ex)
                         {
@@ -211,6 +204,7 @@ namespace UserDataGenerator_C_
 
                     Log.Information("Amount of unique users generated: {Count}", totalAmount);
 
+                    await DataWorker.DBMaintenance_DropAndCreateIdxForTable(DBPath, idxTuple);
                     await DataWorker.VacuumDatabase(DBPath);
                 }
                 catch (Exception ex)
@@ -219,8 +213,8 @@ namespace UserDataGenerator_C_
                     Log.Error(userRecordString);
                 }
             }
-			catch (Exception ex)
-			{
+            catch (Exception ex)
+            {
                 Console.WriteLine(ex.Message);
                 Log.Fatal("App crashed!");
                 Log.Fatal("Cause: " + ex.Message);

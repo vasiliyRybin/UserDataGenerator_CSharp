@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics.Metrics;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,10 +8,6 @@ namespace UserDataGenerator_C_
     {
         private static readonly ThreadLocal<Random> threadRnd = new ThreadLocal<Random>(() => new Random());
         private static readonly string Letters = "AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ";
-        public DataGenerators()
-        {
-            
-        }
 
         [LogMethod]
         public async Task<int> TaxesPayerNumberGenerator(int minValue, int maxValue, int InvalidTaxPayerRatio)
@@ -49,7 +41,7 @@ namespace UserDataGenerator_C_
         [LogMethod]
         public async Task<string> EmailGenerator(string firstName, string lastName)
         {
-            return await Task.Run( () =>
+            return await Task.Run(() =>
             {
                 string result = firstName.ToLower() + "." + lastName.ToLower() + ".";
                 int amountOfPostfixLetters = threadRnd.Value.Next(1, 5);
@@ -60,7 +52,7 @@ namespace UserDataGenerator_C_
                 }
 
                 return (result + "@test.com").ToLowerInvariant();
-            });            
+            });
 
         }
 
@@ -68,7 +60,7 @@ namespace UserDataGenerator_C_
         public async Task<int> PhoneNumberGenerator()
         {
             // Generate a random phone number
-            return await Task.Run(() => 
+            return await Task.Run(() =>
             {
                 return threadRnd.Value.Next(100000000, 999999999);
             });

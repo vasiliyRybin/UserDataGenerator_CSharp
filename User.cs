@@ -1,15 +1,13 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace UserDataGenerator_C_
+﻿namespace UserDataGenerator_C_
 {
     public class User
     {
-        public int TaxID { get;} 
-        public string FirstName { get;}
-        public string LastName { get;}
+        public int TaxID { get; }
+        public string FirstName { get; }
+        public string LastName { get; }
         public string Email { get; set; }
-        public string PhoneNumber { get;}
-        public string PassNumber { get;}
+        public string PhoneNumber { get; }
+        public string PassNumber { get; }
         public string Comment { get; set; }
 
         public User(int taxID, string firstName, string lastName, string email, string phoneNumber, string passNumber, string comment)

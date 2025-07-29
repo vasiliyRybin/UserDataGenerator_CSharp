@@ -2,12 +2,10 @@
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -15,10 +13,11 @@ namespace UserDataGenerator_C_
 {
     public static class DataWorker
     {
+        const int MAX_USERS_PER_ITERATION = 250_000; // Maximum number of users to write per iteration
         public static void CreateDatabase_IfNotExists(string dbPath)
         {
             bool isExists = File.Exists(dbPath);
-            if(!isExists)
+            if (!isExists)
             {
                 SQLiteConnection.CreateFile(dbPath);
                 Log.Information($"Database created at {dbPath}");
@@ -43,7 +42,7 @@ namespace UserDataGenerator_C_
                     }
                 }
 
-                if(!result)
+                if (!result)
                 {
                     using (var command = new SQLiteCommand(Queries.createTableIfNotExists, connection))
                     {
@@ -121,47 +120,49 @@ namespace UserDataGenerator_C_
                 await connection.OpenAsync();
 
                 using (var transaction = connection.BeginTransaction())
-                try
-                {
-                    using (var command = new SQLiteCommand(connection))
-                    {
-                        command.Transaction = transaction;
-
-                        var sb = new StringBuilder();
-                        sb.Append("INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) VALUES ");
-
-                        bool first = true;
-                        foreach (var user in users)
-                        {
-                            if (!first) sb.Append(", ");
-                            sb.Append($"({user.TaxID}, '{user.FirstName.Replace("'", "''")}', '{user.LastName.Replace("'", "''")}', " +
-                                        $"'{user.Email.Replace("'", "''")}', '{user.PhoneNumber}', " +
-                                        $"'{user.PassNumber}', '{user.Comment.Replace("'", "''")}')");
-                            first = false;
-                        }
-
-                        command.CommandText = sb.ToString();
-                        await command.ExecuteNonQueryAsync();
-
-                        transaction.Commit();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"Error during database transaction: {ex.Message}");
                     try
                     {
-                        transaction.Rollback();
+                        using (var command = new SQLiteCommand(connection))
+                        {
+                            command.Transaction = transaction;
+
+                            var sb = new StringBuilder();
+                            sb.Append("INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) VALUES ");
+
+                            bool first = true;
+                            foreach (var user in users)
+                            {
+                                if (!first) sb.Append(", ");
+                                sb.Append($"({user.TaxID}, '{user.FirstName.Replace("'", "''")}', '{user.LastName.Replace("'", "''")}', " +
+                                            $"'{user.Email.Replace("'", "''")}', '{user.PhoneNumber}', " +
+                                            $"'{user.PassNumber}', '{user.Comment.Replace("'", "''")}')"
+                                         );
+                                first = false;
+                            }
+
+                            command.CommandText = sb.ToString();
+                            await command.ExecuteNonQueryAsync();
+
+                            transaction.Commit();
+                        }
                     }
-                    catch (Exception rollbackEx)
+                    catch (Exception ex)
                     {
-                        Log.Error($"Error during transaction rollback: {rollbackEx.Message}");
+                        Log.Error($"Error during database transaction: {ex.Message}");
+                        try
+                        {
+                            transaction.Rollback();
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            Log.Error($"Error during transaction rollback: {rollbackEx.Message}");
+                        }
                     }
-                }
-                finally
-                {
-                    connection.Close();
-                }
+                    finally
+                    {
+                        connection.Close();
+                        if (users.Count > 1) Log.Information($"Inserted {users.Count} users into the database: {dbPath}.");
+                    }
             }
         }
 
@@ -171,13 +172,13 @@ namespace UserDataGenerator_C_
             bool fileExists = File.Exists(filePath);
             bool writeHeader = !fileExists || new FileInfo(filePath).Length == 0;
 
-            if(users.Count > 1) Log.Information($"Writing {users.Count} users to CSV file: {filePath}");
+            if (users.Count > 1) Log.Information($"Writing {users.Count} users to CSV file: {filePath}");
 
             var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 HasHeaderRecord = writeHeader,
                 Delimiter = ";",
-            };            
+            };
 
             using (var writer = new StreamWriter(filePath, append: true))
             using (var csv = new CsvWriter(writer, config))
@@ -188,7 +189,7 @@ namespace UserDataGenerator_C_
         }
 
         [LogMethod]
-        public static async Task CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
+        private static async Task CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
         {
             var query = Queries.Maintainenance_CreateIdx.Replace("@idx_name", indexName)
                                                         .Replace("@table", tableName)
@@ -201,10 +202,11 @@ namespace UserDataGenerator_C_
                     await command.ExecuteNonQueryAsync();
                 }
             }
+            Log.Information($"Index {indexName} created successfully if it did not exist.");
         }
 
         [LogMethod]
-        public static async Task DropIndexIfExists(string dbPath, string indexName)
+        private static async Task DropIndexIfExists(string dbPath, string indexName)
         {
             var query = Queries.Maintainenance_DropIdx.Replace("@idx_name", indexName);
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
@@ -214,6 +216,23 @@ namespace UserDataGenerator_C_
                 {
                     await command.ExecuteNonQueryAsync();
                 }
+            }
+            Log.Information($"Index {indexName} dropped successfully if it existed.");
+        }
+
+        /// <summary>
+        /// Drops and creates indexes for the specified table in the database.
+        /// in Tuple<string, string, string> on 1st place should be index name, 2nd - table name, 3rd - column name.
+        /// </summary>
+        /// <param name="dbPath"></param>
+        /// <param name="idxData"></param>
+        /// <returns></returns>
+        public static async Task DBMaintenance_DropAndCreateIdxForTable(string dbPath, List<Tuple<string, string, string>> idxData)
+        {
+            foreach (var item in idxData)
+            {
+                await DropIndexIfExists(dbPath, item.Item1);
+                await CreateIndexIfNotExists(dbPath, item.Item1, item.Item2, item.Item3);
             }
         }
 
@@ -234,23 +253,46 @@ namespace UserDataGenerator_C_
         [LogMethod]
         public static async Task WriteDataAsync(StartupParameters parameters, string generatedDataPath, Dictionary<string, string> paths, HashSet<User> usersSet)
         {
-            var DBPath = generatedDataPath + paths["PathToDB"];
+            if (usersSet.Count > MAX_USERS_PER_ITERATION)
+            {
+                Log.Warning($"The number of users ({usersSet.Count}) exceeds the maximum allowed per iteration ({MAX_USERS_PER_ITERATION}). " +
+                            $"The data will be written in chunks of {MAX_USERS_PER_ITERATION} records per iteration.");
 
+                int startIndex = 0;
+                while (startIndex < usersSet.Count)
+                {
+                    var chunk = usersSet.Skip(startIndex).Take(MAX_USERS_PER_ITERATION).ToHashSet();
+
+                    Log.Information($"Writing chunk of {chunk.Count} users to the output.");
+
+                    await DataWriterAsync(parameters, generatedDataPath, paths, chunk);
+                    startIndex += MAX_USERS_PER_ITERATION;
+                }
+            }
+            else
+            {
+                if (usersSet.Count > 1) Log.Information($"Writing {usersSet.Count} users to the output");
+                await DataWriterAsync(parameters, generatedDataPath, paths, usersSet);
+            }
+        }
+        private static async Task DataWriterAsync(StartupParameters parameters, string generatedDataPath, Dictionary<string, string> paths, HashSet<User> usersSet)
+        {
             switch (parameters.OutputTo)
             {
                 case 0: // Write to CSV
                     await WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
                     break;
                 case 1: // Write to DB
-                    await InsertUserToDB(DBPath, usersSet);
+                    await InsertUserToDB(generatedDataPath + paths["PathToDB"], usersSet);
                     break;
                 case 2: // Both options (To CSV and DB)
                     await WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                    await InsertUserToDB(DBPath, usersSet);
+                    await InsertUserToDB(generatedDataPath + paths["PathToDB"], usersSet);
                     break;
                 default:
                     break;
             }
+            GC.Collect();
         }
     }
 }
