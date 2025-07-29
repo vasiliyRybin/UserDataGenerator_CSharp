@@ -2,6 +2,7 @@
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
@@ -117,45 +118,31 @@ namespace UserDataGenerator_C_
         {
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
                 using (var transaction = connection.BeginTransaction())
                 try
                 {
-                    using (var command = new SQLiteCommand(
-                    "INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) " +
-                    "VALUES (@TaxID, @FirstName, @LastName, @Email, @PhoneNumber, @PassNumber, @Comment)",
-                    connection,
-                    transaction))
+                    using (var command = new SQLiteCommand(connection))
                     {
-                        var taxIdParam = command.Parameters.Add("@TaxID", System.Data.DbType.Int32);
-                        var firstNameParam = command.Parameters.Add("@FirstName", System.Data.DbType.String);
-                        var lastNameParam = command.Parameters.Add("@LastName", System.Data.DbType.String);
-                        var emailParam = command.Parameters.Add("@Email", System.Data.DbType.String);
-                        var phoneNumberParam = command.Parameters.Add("@PhoneNumber", System.Data.DbType.String);
-                        var passNumberParam = command.Parameters.Add("@PassNumber", System.Data.DbType.String);
-                        var commentParam = command.Parameters.Add("@Comment", System.Data.DbType.String);
+                        command.Transaction = transaction;
 
+                        var sb = new StringBuilder();
+                        sb.Append("INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) VALUES ");
+
+                        bool first = true;
                         foreach (var user in users)
                         {
-                            try
-                            {
-                                taxIdParam.Value = user.TaxID;
-                                firstNameParam.Value = user.FirstName;
-                                lastNameParam.Value = user.LastName;
-                                emailParam.Value = user.Email;
-                                phoneNumberParam.Value = user.PhoneNumber;
-                                passNumberParam.Value = user.PassNumber;
-                                commentParam.Value = user.Comment;
-
-                                await command.ExecuteNonQueryAsync();
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error($"Error inserting user: {ex.Message}");
-                                Log.Error(user.ToString());
-                            }
+                            if (!first) sb.Append(", ");
+                            sb.Append($"({user.TaxID}, '{user.FirstName.Replace("'", "''")}', '{user.LastName.Replace("'", "''")}', " +
+                                        $"'{user.Email.Replace("'", "''")}', '{user.PhoneNumber}', " +
+                                        $"'{user.PassNumber}', '{user.Comment.Replace("'", "''")}')");
+                            first = false;
                         }
+
+                        command.CommandText = sb.ToString();
+                        await command.ExecuteNonQueryAsync();
+
                         transaction.Commit();
                     }
                 }
@@ -188,8 +175,9 @@ namespace UserDataGenerator_C_
 
             var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                HasHeaderRecord = writeHeader
-            };
+                HasHeaderRecord = writeHeader,
+                Delimiter = ";",
+            };            
 
             using (var writer = new StreamWriter(filePath, append: true))
             using (var csv = new CsvWriter(writer, config))

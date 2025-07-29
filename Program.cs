@@ -137,7 +137,7 @@ namespace UserDataGenerator_C_
                         firstName,
                         lastName,
                         email,
-                        "+" + dataGenerators.PhoneNumberGenerator(),
+                        "+" + await dataGenerators.PhoneNumberGenerator(),
                         passNumber,
                         string.Empty
                     );

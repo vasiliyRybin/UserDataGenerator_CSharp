@@ -92,6 +92,8 @@ namespace UserDataGenerator_C_
                         }
                         else Log.Warning("Invalid value for 'data_bulk_insert' parameter. Using default value: {DefaultValue}", DEFAULT_VALUE_DbBulkInsert);
                         break;
+                    case "debug":
+                        break;
                     default:
                         Log.Error("Unknown parameter: {ParamName}", paramName);
                         break;
