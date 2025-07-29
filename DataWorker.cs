@@ -120,42 +120,60 @@ namespace UserDataGenerator_C_
                 connection.Open();
 
                 using (var transaction = connection.BeginTransaction())
-                using (var command = new SQLiteCommand(
+                try
+                {
+                    using (var command = new SQLiteCommand(
                     "INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) " +
                     "VALUES (@TaxID, @FirstName, @LastName, @Email, @PhoneNumber, @PassNumber, @Comment)",
                     connection,
                     transaction))
-                {
-                    var taxIdParam = command.Parameters.Add("@TaxID", System.Data.DbType.Int32);
-                    var firstNameParam = command.Parameters.Add("@FirstName", System.Data.DbType.String);
-                    var lastNameParam = command.Parameters.Add("@LastName", System.Data.DbType.String);
-                    var emailParam = command.Parameters.Add("@Email", System.Data.DbType.String);
-                    var phoneNumberParam = command.Parameters.Add("@PhoneNumber", System.Data.DbType.String);
-                    var passNumberParam = command.Parameters.Add("@PassNumber", System.Data.DbType.String);
-                    var commentParam = command.Parameters.Add("@Comment", System.Data.DbType.String);
-
-                    foreach (var user in users)
                     {
-                        try
+                        var taxIdParam = command.Parameters.Add("@TaxID", System.Data.DbType.Int32);
+                        var firstNameParam = command.Parameters.Add("@FirstName", System.Data.DbType.String);
+                        var lastNameParam = command.Parameters.Add("@LastName", System.Data.DbType.String);
+                        var emailParam = command.Parameters.Add("@Email", System.Data.DbType.String);
+                        var phoneNumberParam = command.Parameters.Add("@PhoneNumber", System.Data.DbType.String);
+                        var passNumberParam = command.Parameters.Add("@PassNumber", System.Data.DbType.String);
+                        var commentParam = command.Parameters.Add("@Comment", System.Data.DbType.String);
+
+                        foreach (var user in users)
                         {
-                            taxIdParam.Value = user.TaxID;
-                            firstNameParam.Value = user.FirstName;
-                            lastNameParam.Value = user.LastName;
-                            emailParam.Value = user.Email;
-                            phoneNumberParam.Value = user.PhoneNumber;
-                            passNumberParam.Value = user.PassNumber;
-                            commentParam.Value = user.Comment;
+                            try
+                            {
+                                taxIdParam.Value = user.TaxID;
+                                firstNameParam.Value = user.FirstName;
+                                lastNameParam.Value = user.LastName;
+                                emailParam.Value = user.Email;
+                                phoneNumberParam.Value = user.PhoneNumber;
+                                passNumberParam.Value = user.PassNumber;
+                                commentParam.Value = user.Comment;
 
-                            await command.ExecuteNonQueryAsync();
+                                await command.ExecuteNonQueryAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Error($"Error inserting user: {ex.Message}");
+                                Log.Error(user.ToString());
+                            }
                         }
-                        catch(Exception ex) 
-                        { 
-                            Log.Error($"Error inserting user: {ex.Message}");
-                            Log.Error(user.ToString());
-                        }
+                        transaction.Commit();
                     }
-
-                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"Error during database transaction: {ex.Message}");
+                    try
+                    {
+                        transaction.Rollback();
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        Log.Error($"Error during transaction rollback: {rollbackEx.Message}");
+                    }
+                }
+                finally
+                {
+                    connection.Close();
                 }
             }
         }
