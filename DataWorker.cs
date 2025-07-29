@@ -113,79 +113,86 @@ namespace UserDataGenerator_C_
         }
 
         [LogMethod]
-        public static async Task InsertUserToDB(string dbPath, HashSet<User> users)
+        private static async Task InsertUserToDB(string dbPath, HashSet<User> users)
         {
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
             {
                 await connection.OpenAsync();
 
                 using (var transaction = connection.BeginTransaction())
+                try
+                {
+                    using (var command = new SQLiteCommand(connection))
+                    {
+                        command.Transaction = transaction;
+
+                        var sb = new StringBuilder();
+                        sb.Append("INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) VALUES ");
+
+                        bool first = true;
+                        foreach (var user in users)
+                        {
+                            if (!first) sb.Append(", ");
+                            sb.Append($"({user.TaxID}, '{user.FirstName.Replace("'", "''")}', '{user.LastName.Replace("'", "''")}', " +
+                                        $"'{user.Email.Replace("'", "''")}', '{user.PhoneNumber}', " +
+                                        $"'{user.PassNumber}', '{user.Comment.Replace("'", "''")}')"
+                                        );
+                            first = false;
+                        }
+
+                        command.CommandText = sb.ToString();
+                        await command.ExecuteNonQueryAsync();
+
+                        transaction.Commit();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"Error during database transaction: {ex.Message}");
                     try
                     {
-                        using (var command = new SQLiteCommand(connection))
-                        {
-                            command.Transaction = transaction;
-
-                            var sb = new StringBuilder();
-                            sb.Append("INSERT INTO Users (TaxID, FirstName, LastName, Email, PhoneNumber, PassNumber, Comment) VALUES ");
-
-                            bool first = true;
-                            foreach (var user in users)
-                            {
-                                if (!first) sb.Append(", ");
-                                sb.Append($"({user.TaxID}, '{user.FirstName.Replace("'", "''")}', '{user.LastName.Replace("'", "''")}', " +
-                                            $"'{user.Email.Replace("'", "''")}', '{user.PhoneNumber}', " +
-                                            $"'{user.PassNumber}', '{user.Comment.Replace("'", "''")}')"
-                                         );
-                                first = false;
-                            }
-
-                            command.CommandText = sb.ToString();
-                            await command.ExecuteNonQueryAsync();
-
-                            transaction.Commit();
-                        }
+                        transaction.Rollback();
                     }
-                    catch (Exception ex)
+                    catch (Exception rollbackEx)
                     {
-                        Log.Error($"Error during database transaction: {ex.Message}");
-                        try
-                        {
-                            transaction.Rollback();
-                        }
-                        catch (Exception rollbackEx)
-                        {
-                            Log.Error($"Error during transaction rollback: {rollbackEx.Message}");
-                        }
+                        Log.Error($"Error during transaction rollback: {rollbackEx.Message}");
                     }
-                    finally
-                    {
-                        connection.Close();
-                        if (users.Count > 1) Log.Information($"Inserted {users.Count} users into the database: {dbPath}.");
-                    }
+                }
+                finally
+                {
+                    connection.Close();
+                    if (users.Count > 1) Log.Information($"Inserted {users.Count} users into the database: {dbPath}.");
+                }
             }
         }
 
         [LogMethod]
-        public static async Task WriteDataToCSV(string filePath, HashSet<User> users)
+        private static async Task WriteDataToCSV(string filePath, HashSet<User> users)
         {
-            bool fileExists = File.Exists(filePath);
-            bool writeHeader = !fileExists || new FileInfo(filePath).Length == 0;
-
-            if (users.Count > 1) Log.Information($"Writing {users.Count} users to CSV file: {filePath}");
-
-            var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture)
+            try
             {
-                HasHeaderRecord = writeHeader,
-                Delimiter = ";",
-            };
+                bool fileExists = File.Exists(filePath);
+                bool writeHeader = !fileExists || new FileInfo(filePath).Length == 0;
 
-            using (var writer = new StreamWriter(filePath, append: true))
-            using (var csv = new CsvWriter(writer, config))
-            {
-                await csv.WriteRecordsAsync(users);
+                if (users.Count > 1) Log.Information($"Writing {users.Count} users to CSV file: {filePath}");
+
+                var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = writeHeader,
+                    Delimiter = ";",
+                };
+
+                using (var writer = new StreamWriter(filePath, append: true))
+                using (var csv = new CsvWriter(writer, config))
+                {
+                    await csv.WriteRecordsAsync(users);
+                }
+                if (users.Count > 1) Log.Information($"Data written to CSV file: {filePath}");
             }
-            if (users.Count > 1) Log.Information($"Data written to CSV file: {filePath}");
+            catch (Exception ex)
+            {
+                Log.Error($"Error during attemp to write data to CSV file. {ex.Message}");
+            }
         }
 
         [LogMethod]
