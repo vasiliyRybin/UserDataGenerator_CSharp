@@ -1,55 +1,77 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace UserDataGenerator_C_
 {
     internal class DataGenerators
     {
-        private static readonly Random rnd = new Random();
+        private static readonly ThreadLocal<Random> threadRnd = new ThreadLocal<Random>(() => new Random());
         private static readonly string Letters = "AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ";
         public DataGenerators()
         {
             
         }
 
-        public int TaxesPayerNumberGenerator(int minValue, int maxValue, int InvalidTaxPayerRatio)
+        [LogMethod]
+        public async Task<int> TaxesPayerNumberGenerator(int minValue, int maxValue, int InvalidTaxPayerRatio)
         {
-            if (rnd.Next(0, 100) > InvalidTaxPayerRatio)
+            return await Task.Run(() =>
             {
-                return rnd.Next(minValue, maxValue);
-            }
-            else
-            {
-                // Generate invalid tax payer number
-                return rnd.Next((maxValue - 1) * -1, (minValue - 1) * -1);
-            }
+                if (threadRnd.Value.Next(0, 100) > InvalidTaxPayerRatio)
+                {
+                    return threadRnd.Value.Next(minValue, maxValue);
+                }
+                else
+                {
+                    // Generate invalid tax payer number
+                    return threadRnd.Value.Next((maxValue - 1) * -1, (minValue - 1) * -1);
+                }
+            });
         }
 
-        public string KurwaPassNumberGenerator()
+        [LogMethod]
+        public async Task<string> KurwaPassNumberGenerator()
         {
-            string letter = Letters[rnd.Next(Letters.Length - 1)].ToString();
-            return "ZZ" + letter + rnd.Next(100000, 999999);
+            return await Task.Run
+            (() =>
+                {
+                    string letter = Letters[threadRnd.Value.Next(Letters.Length - 1)].ToString();
+                    return "ZZ" + letter + threadRnd.Value.Next(100000, 999999);
+                }
+            );
         }
-        public string EmailGenerator(string firstName, string lastName)
-        {
-            string result = firstName.ToLower() + "." + lastName.ToLower() + ".";
-            int amountOfPostfixLetters = rnd.Next(1, 5);
 
-            for (int i = 0; i < amountOfPostfixLetters; i++)
+        [LogMethod]
+        public async Task<string> EmailGenerator(string firstName, string lastName)
+        {
+            return await Task.Run( () =>
             {
-                result += Letters[rnd.Next(Letters.Length - 1)];
-            }
+                string result = firstName.ToLower() + "." + lastName.ToLower() + ".";
+                int amountOfPostfixLetters = threadRnd.Value.Next(1, 5);
 
-            return (result + "@test.com").ToLowerInvariant();
+                for (int i = 0; i < amountOfPostfixLetters; i++)
+                {
+                    result += Letters[threadRnd.Value.Next(Letters.Length - 1)];
+                }
+
+                return (result + "@test.com").ToLowerInvariant();
+            });            
+
         }
 
-        public int PhoneNumberGenerator()
+        [LogMethod]
+        public async Task<int> PhoneNumberGenerator()
         {
             // Generate a random phone number
-            return rnd.Next(100000000, 999999999);
+            return await Task.Run(() => 
+            {
+                return threadRnd.Value.Next(100000000, 999999999);
+            });
         }
     }
 }

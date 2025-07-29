@@ -24,7 +24,8 @@ namespace UserDataGenerator_C_
             }
         }
 
-        public static bool CreateUsersTable_IfNotExists(string dbPath)
+        [LogMethod]
+        public static async Task<bool> CreateUsersTable_IfNotExistsAsync(string dbPath)
         {
             bool result = false;
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
@@ -45,14 +46,15 @@ namespace UserDataGenerator_C_
                 {
                     using (var command = new SQLiteCommand(Queries.createTableIfNotExists, connection))
                     {
-                        command.ExecuteNonQuery();
+                        await command.ExecuteNonQueryAsync();
                     }
                 }
             }
             return result;
         }
 
-        public static List<User> GetUsersFromDB(string dbPath)
+        [LogMethod]
+        public static async Task<List<User>> GetUsersFromDBAsync(string dbPath)
         {
             List<User> users = new List<User>();
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
@@ -64,7 +66,7 @@ namespace UserDataGenerator_C_
                 {
                     using (var reader = command.ExecuteReader())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             User user = new User(
                                 int.Parse(reader["TaxID"].ToString()),
@@ -83,7 +85,8 @@ namespace UserDataGenerator_C_
             return users;
         }
 
-        public static int GetDataCountFromTable(string dbPath, string columnName, string tblName, string value)
+        [LogMethod]
+        public static async Task<int> GetDataCountFromTable(string dbPath, string columnName, string tblName, string value)
         {
             int result = -1;
 
@@ -96,9 +99,9 @@ namespace UserDataGenerator_C_
                 using (var command = new SQLiteCommand(query, connection))
                 {
                     //command.Parameters.AddWithValue("@value", value);    
-                    using (var reader = command.ExecuteReader())
+                    using (var reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        while (await reader.ReadAsync())
                         {
                             result = int.Parse(reader[0].ToString());
                         }
@@ -109,8 +112,8 @@ namespace UserDataGenerator_C_
             return result;
         }
 
-
-        public static void InsertUserToDB(string dbPath, HashSet<User> users)
+        [LogMethod]
+        public static async Task InsertUserToDB(string dbPath, HashSet<User> users)
         {
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
             {
@@ -143,7 +146,7 @@ namespace UserDataGenerator_C_
                             passNumberParam.Value = user.PassNumber;
                             commentParam.Value = user.Comment;
 
-                            command.ExecuteNonQuery();
+                            await command.ExecuteNonQueryAsync();
                         }
                         catch(Exception ex) 
                         { 
@@ -157,7 +160,8 @@ namespace UserDataGenerator_C_
             }
         }
 
-        public static void WriteDataToCSV(string filePath, HashSet<User> users)
+        [LogMethod]
+        public static async Task WriteDataToCSV(string filePath, HashSet<User> users)
         {
             bool fileExists = File.Exists(filePath);
             bool writeHeader = !fileExists || new FileInfo(filePath).Length == 0;
@@ -172,12 +176,13 @@ namespace UserDataGenerator_C_
             using (var writer = new StreamWriter(filePath, append: true))
             using (var csv = new CsvWriter(writer, config))
             {
-                csv.WriteRecords(users);
+                await csv.WriteRecordsAsync(users);
             }
             if (users.Count > 1) Log.Information($"Data written to CSV file: {filePath}");
         }
 
-        public static void CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
+        [LogMethod]
+        public static async Task CreateIndexIfNotExists(string dbPath, string indexName, string tableName, string columnName)
         {
             var query = Queries.Maintainenance_CreateIdx.Replace("@idx_name", indexName)
                                                         .Replace("@table", tableName)
@@ -187,12 +192,13 @@ namespace UserDataGenerator_C_
                 connection.Open();
                 using (var command = new SQLiteCommand(query, connection))
                 {
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
             }
         }
 
-        public static void DropIndexIfExists(string dbPath, string indexName)
+        [LogMethod]
+        public static async Task DropIndexIfExists(string dbPath, string indexName)
         {
             var query = Queries.Maintainenance_DropIdx.Replace("@idx_name", indexName);
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
@@ -200,39 +206,41 @@ namespace UserDataGenerator_C_
                 connection.Open();
                 using (var command = new SQLiteCommand(query, connection))
                 {
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
             }
-        }   
+        }
 
-        public static void VacuumDatabase(string dbPath)
+        [LogMethod]
+        public static async Task VacuumDatabase(string dbPath)
         {
             using (var connection = new SQLiteConnection($"Data Source={dbPath};Version=3;"))
             {
                 connection.Open();
                 using (var command = new SQLiteCommand(Queries.Maintainenance_VacuumDB, connection))
                 {
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
             }
             Log.Information("Database vacuumed successfully.");
         }
 
-        public static void WriteData(StartupParameters parameters, string generatedDataPath, Dictionary<string, string> paths, HashSet<User> usersSet)
+        [LogMethod]
+        public static async Task WriteDataAsync(StartupParameters parameters, string generatedDataPath, Dictionary<string, string> paths, HashSet<User> usersSet)
         {
             var DBPath = generatedDataPath + paths["PathToDB"];
 
             switch (parameters.OutputTo)
             {
                 case 0: // Write to CSV
-                    WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                    await WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
                     break;
                 case 1: // Write to DB
-                    InsertUserToDB(DBPath, usersSet);
+                    await InsertUserToDB(DBPath, usersSet);
                     break;
                 case 2: // Both options (To CSV and DB)
-                    WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
-                    InsertUserToDB(DBPath, usersSet);
+                    await WriteDataToCSV(generatedDataPath + paths["PathToCSV"], usersSet);
+                    await InsertUserToDB(DBPath, usersSet);
                     break;
                 default:
                     break;

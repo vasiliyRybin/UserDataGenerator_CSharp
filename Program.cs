@@ -14,7 +14,7 @@ namespace UserDataGenerator_C_
 {
     public class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {            
             Dictionary<string, string> paths = new Dictionary<string, string>
             {
@@ -62,11 +62,11 @@ namespace UserDataGenerator_C_
 
                 // Create database and table if it does not exist 
                 DataWorker.CreateDatabase_IfNotExists(DBPath);
-                bool isUsersTableExists = DataWorker.CreateUsersTable_IfNotExists(DBPath);
+                bool isUsersTableExists = await DataWorker.CreateUsersTable_IfNotExistsAsync(DBPath);
 
                 if (isUsersTableExists && parameters.InMemoryProcessing)
                 {
-                    usersInDBSet = new HashSet<User>(DataWorker.GetUsersFromDB(DBPath));
+                    usersInDBSet = new HashSet<User>(await DataWorker.GetUsersFromDBAsync(DBPath));
                     taxIdDBSet = new HashSet<int>(usersInDBSet.Select(x => x.TaxID));
                     passNumberSetDB = new HashSet<string>(usersInDBSet.Select(x => x.PassNumber));
                     emailSetDB = new HashSet<string>(usersInDBSet.Select(x => x.Email));
@@ -79,12 +79,12 @@ namespace UserDataGenerator_C_
                 while (i < parameters.Amount)
                 {
                     bool isTaxIdAlreadyExists = false;
-                    int taxId = dataGenerators.TaxesPayerNumberGenerator(StartupParameters.MIN_VALID_TAXES_PAYER_NUMBER, 
+                    int taxId = await dataGenerators.TaxesPayerNumberGenerator(StartupParameters.MIN_VALID_TAXES_PAYER_NUMBER, 
                                                                          StartupParameters.MAX_VALID_TAXES_PAYER_NUMBER,
                                                                          parameters.InvalidTaxPayerRatio);
 
                     if (parameters.InMemoryProcessing) isTaxIdAlreadyExists = taxIdDBSet.Contains(taxId) || taxesPayerNumberSet.Contains(taxId);
-                    else isTaxIdAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0 || taxesPayerNumberSet.Contains(taxId);
+                    else isTaxIdAlreadyExists = await DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", taxId.ToString()) > 0 || taxesPayerNumberSet.Contains(taxId);
 
                     if(!isTaxIdAlreadyExists)
                     {
@@ -98,10 +98,10 @@ namespace UserDataGenerator_C_
                 while (i < parameters.Amount)
                 {
                     bool isPassNumberAlreadyExists = false;
-                    string passNumber = dataGenerators.KurwaPassNumberGenerator();
+                    string passNumber = await dataGenerators.KurwaPassNumberGenerator();
 
                     if (parameters.InMemoryProcessing) isPassNumberAlreadyExists = passNumberSetDB.Contains(passNumber);
-                    else isPassNumberAlreadyExists = DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", passNumber) > 0;
+                    else isPassNumberAlreadyExists = await DataWorker.GetDataCountFromTable(DBPath, "TaxID", "Users", passNumber) > 0;
 
                     if (!isPassNumberAlreadyExists)
                     {
@@ -145,10 +145,10 @@ namespace UserDataGenerator_C_
                     do
                     {
                         if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email) || emailSetDB.Contains(user.Email);
-                        else isEmailExists = DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0 || emailSetDB.Contains(user.Email);
+                        else isEmailExists = await DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0 || emailSetDB.Contains(user.Email);
                         
-                        if(isEmailExists) user.Email = lastName.Contains("\'") ? dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", "")) 
-                                                                               : dataGenerators.EmailGenerator(firstName, lastName);
+                        if(isEmailExists) user.Email = lastName.Contains("\'") ? await dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", "")) 
+                                                                               : await dataGenerators.EmailGenerator(firstName, lastName);
                         userRecordString = user.ToString();
 
                     } while (isEmailExists);
@@ -161,7 +161,7 @@ namespace UserDataGenerator_C_
                     {
                         try
                         {
-                            DataWorker.WriteData(parameters, generatedDataPath, paths, usersSet);
+                            await DataWorker.WriteDataAsync(parameters, generatedDataPath, paths, usersSet);
                             usersSet.Clear();
                             i++;
                             totalAmount += 1;
@@ -171,13 +171,13 @@ namespace UserDataGenerator_C_
                              */
                             if (totalAmount % 1000 == 1)
                             {
-                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
-                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
-                                DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
+                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_TaxID");
+                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_Email");
+                                await DataWorker.DropIndexIfExists(DBPath, "IX_Users_PassNumber");
 
-                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
-                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
-                                DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
+                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_TaxID", "Users", "TaxID");
+                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_Email", "Users", "Email");
+                                await DataWorker.CreateIndexIfNotExists(DBPath, "IX_Users_PassNumber", "Users", "PassNumber");
                             }
                         }
                         catch (Exception ex)
@@ -199,12 +199,12 @@ namespace UserDataGenerator_C_
                     if (parameters.DbBulkInsert)
                     {
                         Log.Information("Bulk insert to DB is enabled. Inserting all records at once...");
-                        DataWorker.WriteData(parameters, generatedDataPath, paths, usersSet);
+                        await DataWorker.WriteDataAsync(parameters, generatedDataPath, paths, usersSet);
                     }
 
                     Log.Information("Amount of unique users generated: {Count}", totalAmount);
 
-                    DataWorker.VacuumDatabase(DBPath);
+                    await DataWorker.VacuumDatabase(DBPath);
                 }
                 catch (Exception ex)
                 {
