@@ -37,7 +37,7 @@ namespace UserDataGenerator_C_
             LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, outputTemplate: "[{Timestamp:dd-MM-yyyy HH:mm:ss}] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .WriteTo.Console();
+                .WriteTo.Console(outputTemplate: "[{Timestamp:dd-MM-yyyy HH:mm:ss}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
             Log.Logger = loggerConfiguration.CreateLogger();
 
             try
@@ -74,7 +74,6 @@ namespace UserDataGenerator_C_
 
                 int i = START_INDEX;
                 var dataGenerators = new DataGenerators();
-                var rnd = new Random().Next(StartupParameters.MIN_VALID_TAXES_PAYER_NUMBER, StartupParameters.MAX_VALID_TAXES_PAYER_NUMBER);
 
                 while (i < parameters.Amount)
                 {
@@ -115,13 +114,21 @@ namespace UserDataGenerator_C_
                 var randomizerFirstName = RandomizerFactory.GetRandomizer(new FieldOptionsFirstName());
                 var randomizerLastName = RandomizerFactory.GetRandomizer(new FieldOptionsLastName());
 
+                var taxID_Arr = taxesPayerNumberSet.ToArray();
+                var passNumber_Arr = passNumberSet.ToArray();
+
+                taxesPayerNumberSet = null;
+                passNumberSet = null;
+                GC.Collect();
+                Log.Debug("GC");
+
                 while (i < parameters.Amount)
                 {
                     bool isEmailExists = false;
                     string firstName = randomizerFirstName.Generate();
                     string lastName = randomizerLastName.Generate();
-                    int taxID = taxesPayerNumberSet.ElementAt(i);
-                    string passNumber = passNumberSet.ElementAt(i);
+                    int taxID = taxID_Arr[i];
+                    string passNumber = passNumber_Arr[i];
 
                     string email = string.Empty;                    
                     if(lastName.Contains("\'")) 
@@ -144,7 +151,7 @@ namespace UserDataGenerator_C_
 
                     do
                     {
-                        if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email) || emailSetDB.Contains(user.Email);
+                        if (parameters.InMemoryProcessing) isEmailExists = emailSetDB.Contains(user.Email);
                         else isEmailExists = await DataWorker.GetDataCountFromTable(DBPath, "Email", "Users", user.Email) > 0 || emailSetDB.Contains(user.Email);
                         
                         if(isEmailExists) user.Email = lastName.Contains("\'") ? await dataGenerators.EmailGenerator(firstName, lastName.Replace("\'", "")) 

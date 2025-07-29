@@ -59,7 +59,7 @@ namespace UserDataGenerator_C_
                         if (int.TryParse(item.Split(':')[1].Trim(), out int parsedRatio) && parsedRatio >= 0)
                         {
                             InvalidTaxPayerRatio = parsedRatio;
-                            Log.Information("Tax payer number ratio is: {Ratio}", InvalidTaxPayerRatio);
+                            Log.Information("Invalid tax payer number ratio is: {Ratio}", InvalidTaxPayerRatio);
                         }
                         else Log.Warning("Invalid value for 'invalid_tax_id_ratio' parameter. Using default value: {DefaultValue}", DEFAULT_VALUE_InvalidTaxPayerRatio);
                         break;
